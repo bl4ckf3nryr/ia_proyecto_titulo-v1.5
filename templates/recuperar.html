@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recuperar contraseña</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="pagina pagina--login">
+  <main class="tarjeta tarjeta--login tarjeta--recuperar">
+    <header class="encabezado">
+      <h1>Recuperar contraseña</h1>
+      <p class="subtitulo" id="subtitulo-paso">Ingresa tu correo para continuar</p>
+    </header>
+
+    <!-- ── PASO 1: Email ─────────────────────────────────── -->
+    <section id="paso-1" class="recuperar-paso">
+      <div class="campo">
+        <label for="email-input">Correo electrónico</label>
+        <input type="email" id="email-input"
+               placeholder="demo@example.com" autocomplete="username" required />
+      </div>
+      <button id="btn-paso1" class="boton boton--primario">
+        <span class="btn-text">Enviar código</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+      <p id="msg-paso1" class="mensaje" role="alert" aria-live="polite"></p>
+    </section>
+
+    <!-- ── PASO 2: Código ─────────────────────────────────── -->
+    <section id="paso-2" class="recuperar-paso oculto">
+      <div class="codigo-simulado" id="codigo-display" aria-live="polite">
+        <span class="codigo-etiqueta">Código simulado</span>
+        <span class="codigo-valor" id="codigo-valor">——</span>
+        <span class="codigo-aviso">Copia este código y pégalo abajo</span>
+      </div>
+
+      <div class="campo">
+        <label for="codigo-input">Ingresa el código</label>
+        <input type="text" id="codigo-input"
+               placeholder="123456" maxlength="6"
+               autocomplete="one-time-code" inputmode="numeric" />
+      </div>
+      <button id="btn-paso2" class="boton boton--primario">
+        <span class="btn-text">Verificar código</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+      <p id="msg-paso2" class="mensaje" role="alert" aria-live="polite"></p>
+    </section>
+
+    <!-- ── PASO 3: Nueva contraseña ──────────────────────── -->
+    <section id="paso-3" class="recuperar-paso oculto">
+      <div class="campo">
+        <label for="nueva-password">Nueva contraseña</label>
+        <input type="password" id="nueva-password"
+               placeholder="Mínimo 6 caracteres" autocomplete="new-password" />
+      </div>
+      <div class="campo">
+        <label for="confirmar-password">Confirmar contraseña</label>
+        <input type="password" id="confirmar-password"
+               placeholder="Repite la contraseña" autocomplete="new-password" />
+      </div>
+      <button id="btn-paso3" class="boton boton--primario">
+        <span class="btn-text">Cambiar contraseña</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+      <p id="msg-paso3" class="mensaje" role="alert" aria-live="polite"></p>
+    </section>
+
+    <!-- ── PASO 4: Éxito ──────────────────────────────────── -->
+    <section id="paso-exito" class="recuperar-paso oculto">
+      <div class="exito-icono" aria-hidden="true">✓</div>
+      <p class="exito-texto">¡Contraseña actualizada correctamente!</p>
+    </section>
+
+    <div class="recuperar-footer">
+      <a href="/" class="enlace-volver">← Volver al login</a>
+    </div>
+  </main>
+
+  <script src="/static/recuperar.js"></script>
+</body>
+</html>

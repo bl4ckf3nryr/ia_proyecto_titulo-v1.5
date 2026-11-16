@@ -1,0 +1,9 @@
+# Rutas relativas a la carpeta deepseek/ (train.py se ejecuta desde ahí)
+path: dataset
+train: images/train
+val: images/val
+
+# El orden importa: tiene que coincidir con el de la herramienta de etiquetado
+names:
+  0: piso
+  1: pared

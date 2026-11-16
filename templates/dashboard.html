@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="pagina pagina--dashboard">
+  <main class="tarjeta tarjeta--dashboard">
+    <header class="encabezado">
+      <h1>✅ Sesión iniciada</h1>
+      <p id="user-email" class="subtitulo">—</p>
+      <p id="user-empresa" class="badge-empresa"></p>
+    </header>
+
+    <div class="dashboard-acciones">
+      <a href="/admin" id="admin-btn" class="boton boton--primario" hidden>
+        👑 Panel de administración
+      </a>
+      <a href="/supervisor" id="supervisor-btn" class="boton boton--primario" hidden>
+        🎛️ Panel de supervisor
+      </a>
+      <button id="logout-btn" class="boton boton--peligro">
+        Cerrar sesión
+      </button>
+    </div>
+
+    <section class="dashboard-camaras">
+      <div class="admin-seccion-header">
+        <h2 class="admin-subtitulo">📷 Cámaras activas de tu empresa</h2>
+        <button id="refrescar-camaras-btn" class="boton boton--secundario boton--sm">
+          ↻ Refrescar
+        </button>
+      </div>
+      <div id="tabla-camaras" class="tabla-usuarios">
+        <p class="tabla-vacia">Cargando cámaras...</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

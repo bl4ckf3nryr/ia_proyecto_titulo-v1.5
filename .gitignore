@@ -1,0 +1,29 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Base de datos local (NO SUBIR, contiene contraseñas)
+login.db
+*.db
+*.sqlite
+
+# Caché de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Variables de entorno
+.env
+
+# Carpetas pesadas de IA (Modelos y datasets)
+# (Sube el código de deepseek, pero no las carpetas gigantes)
+deepseek/dataset/
+deepseek/referencias/
+deepseek/entrenamiento/
+*.pt
+*.zip
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Simulador de Bodega 3D — Planta única</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #1a1d22; color: #e8eaed; overflow: hidden;
+  }
+  #app { display: flex; height: 100vh; }
+  #viewport { flex: 1; position: relative; }
+  #canvas-wrap { position: absolute; inset: 0; }
+  #panel {
+    width: 360px; background: #232830; overflow-y: auto;
+    padding: 14px; border-left: 1px solid #333a45;
+  }
+  h1 { font-size: 15px; margin: 0 0 4px; color: #00dc78; letter-spacing: .5px; }
+  h2 { font-size: 12px; text-transform: uppercase; color: #8a93a0;
+       margin: 18px 0 8px; border-bottom: 1px solid #333a45; padding-bottom: 4px; }
+  .sub { font-size: 11px; color: #8a93a0; margin-bottom: 8px; }
+  label { display: block; font-size: 12px; color: #b8c0cc; margin: 8px 0 3px; }
+  input, select, button {
+    width: 100%; padding: 7px 9px; font-size: 13px;
+    background: #2c333d; color: #e8eaed; border: 1px solid #3d4552;
+    border-radius: 5px; outline: none;
+  }
+  input:focus, select:focus { border-color: #00dc78; }
+  button { cursor: pointer; transition: .12s; }
+  button:hover { background: #38414d; }
+  button.primary { background: #007a4a; border-color: #00a862; }
+  button.primary:hover { background: #009459; }
+  button.accent { background: #3a5a8a; border-color: #4a7ab0; }
+  button.accent:hover { background: #4a6a9a; }
+  button.danger { background: #6b2020; border-color: #a03030; }
+  button.danger:hover { background: #842828; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .metric {
+    background: #1a1f26; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid #2f3742;
+  }
+  .metric .k { font-size: 10px; color: #8a93a0; text-transform: uppercase; letter-spacing: .4px; }
+  .metric .v { font-size: 18px; font-weight: 600; color: #00dc78; margin-top: 2px; }
+  .status {
+    padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+    text-align: center; margin-top: 6px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .status.vacia { background: #3a2f0f; color: #ffd36e; }
+  .status.bajo_minimo { background: #4a2214; color: #ff9057; }
+  .status.en_rango { background: #0f3a28; color: #00dc78; }
+  .status.llena { background: #0f2a4a; color: #6ec1ff; }
+  .sel-info {
+    background: #1a1f26; padding: 8px 10px; border-radius: 6px;
+    font-size: 12px; border: 1px dashed #3d4552; margin-bottom: 8px;
+  }
+  .sel-info b { color: #00dc78; }
+  .log {
+    font-family: ui-monospace, monospace; font-size: 11px; color: #b8c0cc;
+    background: #14181d; border-radius: 6px; padding: 6px 8px;
+    max-height: 100px; overflow-y: auto; border: 1px solid #2a303a;
+  }
+  .log .err { color: #ff7b7b; }
+  .log .ok  { color: #6ee7a8; }
+  #overlay-hint {
+    position: absolute; bottom: 12px; left: 12px; font-size: 11px;
+    color: #8a93a0; background: rgba(20,24,29,.8); padding: 6px 10px;
+    border-radius: 5px; pointer-events: none;
+  }
+  #cam-status {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 10px; border-radius: 5px; font-size: 11px;
+    background: #14181d; border: 1px solid #2a303a; margin-top: 8px;
+  }
+  #cam-status .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #8a93a0;
+  }
+  #cam-status.ok .dot { background: #00dc78; animation: pulse 1.5s infinite; }
+  #cam-status.err .dot { background: #ff7b7b; }
+  @keyframes pulse { 50% { opacity: 0.3; } }
+  a.link { color: #00dc78; font-size: 12px; text-decoration: none; }
+  a.link:hover { text-decoration: underline; }
+  .capacity-display {
+    background: #0f1a24; padding: 10px; border-radius: 6px;
+    border: 1px solid #2a303a; margin-bottom: 8px;
+    text-align: center;
+  }
+  .capacity-display .big { font-size: 26px; font-weight: 700; color: #00dc78; }
+  .capacity-display .lbl {
+    font-size: 10px; color: #8a93a0; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .capacity-display .sub2 { font-size: 11px; color: #b8c0cc; margin-top: 4px; }
+  .ip-box {
+    background: #12161c; border: 1px solid #2d3540; border-radius: 6px;
+    padding: 10px; margin-bottom: 8px;
+  }
+  .ip-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px; font-size: 12px;
+  }
+  .ip-row:last-child { margin-bottom: 0; }
+  .ip-label { color: #8a93a0; }
+  .ip-value {
+    color: #00dc78; font-family: ui-monospace, monospace;
+    font-weight: 600; font-size: 13px;
+  }
+  .ip-helper { font-size: 10px; color: #6b7684; margin-top: 6px; line-height: 1.3; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport">
+    <div id="canvas-wrap"></div>
+    <div id="overlay-hint">Click: seleccionar posición · Arrastrar: rotar · Rueda: zoom</div>
+  </div>
+
+  <div id="panel">
+    <h1>SIMULADOR DE BODEGA 3D</h1>
+    <div class="sub">Planta única · Pallets en piso · Cámara fija</div>
+
+    <h2>Acceso y Emulación de Cámara</h2>
+    <div class="ip-box">
+      <div class="ip-row">
+        <span class="ip-label">IP Local (Servidor):</span>
+        <span class="ip-value" id="ip-local">Cargando...</span>
+      </div>
+      <div class="ip-row">
+        <span class="ip-label">Puerto:</span>
+        <span class="ip-value" id="ip-port">8080</span>
+      </div>
+      <div class="ip-row">
+        <span class="ip-label">Flujo MJPEG (Camara):</span>
+      </div>
+      <div class="ip-value" style="font-size:11px; word-break:break-all;" id="ip-cam-url">
+        http://...
+      </div>
+      <div class="ip-helper">Usa esta URL en OpenCV, VLC o tu software externo.</div>
+    </div>
+
+    <h2>Capacidad</h2>
+    <div class="capacity-display">
+      <div class="lbl">Capacidad máxima</div>
+      <div class="big" id="cap-big">—</div>
+      <div class="sub2" id="cap-formula">—</div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="k">Ocupados</div><div class="v" id="m-occ">—</div></div>
+      <div class="metric"><div class="k">Libres</div><div class="v" id="m-free">—</div></div>
+      <div class="metric"><div class="k">Ocupación</div><div class="v" id="m-pct">—</div></div>
+      <div class="metric"><div class="k">Mínimo</div><div class="v" id="m-min">—</div></div>
+      <div class="metric"><div class="k">Umbral %</div><div class="v" id="m-thr">—</div></div>
+      <div class="metric"><div class="k">Estado</div><div class="v" id="m-state-val">—</div></div>
+    </div>
+    <div id="m-status" class="status vacia">—</div>
+
+    <h2>Generación aleatoria</h2>
+    <label>Cantidad de pallets a generar</label>
+    <input type="number" id="gen-count" min="1" max="500" value="20">
+    <div class="row" style="margin-top:8px">
+      <button id="btn-gen-random" class="accent">Generar aleatorio</button>
+      <button id="btn-gen-fill" class="accent">Llenar</button>
+    </div>
+    <div class="sub" style="margin-top:6px">
+      Los pallets se colocan en posiciones y tipos aleatorios.
+    </div>
+
+    <h2>Configurar bodega</h2>
+    <div class="row">
+      <div><label>Ancho (2-8)</label><input type="number" id="cfg-w" min="2" max="8" value="4"></div>
+      <div><label>Fondo (2-8)</label><input type="number" id="cfg-d" min="2" max="8" value="3"></div>
+      <div><label>Niveles (1-3)</label><input type="number" id="cfg-l" min="1" max="3" value="1"></div>
+    </div>
+    <label>Umbral mínimo (%)</label>
+    <input type="number" id="cfg-thr" min="0" max="100" step="1" value="20">
+    <div class="sub" id="preview-cap">Capacidad resultante: 12 posiciones</div>
+    <div class="row" style="margin-top:8px">
+      <button id="btn-config" class="primary">Aplicar</button>
+      <button id="btn-clear" class="danger">Vaciar</button>
+    </div>
+    <div class="sub" style="margin-top:6px">Pasillo peatonal amarillo al centro. Use ancho 8 y fondo 6 para cubrir toda la nave (48 posiciones, incluidas las esquinas). Niveles = 1.</div>
+
+    <h2>Selección</h2>
+    <div class="sel-info" id="sel-info">Ningún pallet seleccionado.</div>
+
+    <label>Tipo de producto</label>
+    <select id="sel-product"></select>
+
+    <div class="row" style="margin-top:8px">
+      <button id="btn-add" class="primary">Agregar</button>
+      <button id="btn-remove">Retirar</button>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <button id="btn-move">Mover (destino)</button>
+      <button id="btn-cancel">Cancelar</button>
+    </div>
+
+    <h2>Cámara virtual 3D</h2>
+    <div id="cam-status">
+      <div class="dot"></div>
+      <span id="cam-status-text">Consultando cámara del servidor...</span>
+    </div>
+    <div class="sub" style="margin-top:6px">
+      La cámara corre en el servidor (headless). No necesita esta ventana abierta.
+    </div>
+    <a class="link" href="/camera" target="_blank">Abrir página de cámara →</a><br>
+    <a class="link" href="/viewer3d" target="_blank">Ver escena headless (diagnóstico) →</a><br>
+    <a class="link" href="/video.mjpg" target="_blank">Abrir flujo MJPEG →</a>
+
+    <h2>Registro</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================
+//  CONSTANTES
+// ============================================================
+const CELL = 3.2;
+const BUILDING_MARGIN = 2.5;
+const PALLET_SIZE = 2.6;
+const PALLET_BASE_H = 0.16;
+const PALLET_CARGO_H = 1.8;
+const WALL_HEIGHT = 10;
+const LANE = 2.6;               // ancho del pasillo peatonal central
+
+// Posición en el mundo de cada slot (x,y). Los slots de la mitad derecha
+// se desplazan LANE para dejar libre el pasillo peatonal central.
+function slotWorld(x, y, snap) {
+  const gridW = snap.width * CELL + LANE;
+  const gridD = snap.depth * CELL;
+  const left = Math.ceil(snap.width / 2);
+  const extra = x >= left ? LANE : 0;
+  return {
+    px: -gridW/2 + x * CELL + CELL/2 + extra,
+    pz: -gridD/2 + y * CELL + CELL/2
+  };
+}
+
+function makeHatchTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2c218';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#c99a0a';
+  for (let i = -128; i < 256; i += 32) {
+    g.beginPath();
+    g.moveTo(i, 128); g.lineTo(i + 16, 128);
+    g.lineTo(i + 144, 0); g.lineTo(i + 128, 0);
+    g.closePath(); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let hatchTex = null;
+
+let state = null;
+let selected = null;
+let movingFrom = null;
+
+const $ = id => document.getElementById(id);
+const logEl = $('log');
+function log(msg, kind='') {
+  const div = document.createElement('div');
+  if (kind) div.className = kind;
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+  while (logEl.children.length > 80) logEl.removeChild(logEl.firstChild);
+}
+
+// ============================================================
+//  ESCENA PRINCIPAL (solo para el usuario; la cámara va aparte)
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1d22);
+scene.fog = new THREE.Fog(0x1a1d22, 60, 150);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
+camera.position.set(25, 30, 35);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+$('canvas-wrap').appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 10;
+controls.maxDistance = 140;
+controls.maxPolarAngle = Math.PI / 2.1;
+controls.target.set(0, 2, 0);
+
+// ============================================================
+//  ILUMINACIÓN INDUSTRIAL
+// ============================================================
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+scene.add(new THREE.HemisphereLight(0xdde8f0, 0x4a4a4a, 0.7));
+
+const sun = new THREE.DirectionalLight(0xfff6e8, 1.2);
+sun.position.set(35, 55, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -60;
+sun.shadow.camera.right = 60;
+sun.shadow.camera.top = 60;
+sun.shadow.camera.bottom = -60;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 150;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+
+const warehouseGroup = new THREE.Group();
+scene.add(warehouseGroup);
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let interactables = [];
+
+function hexToInt(hex) { return parseInt(hex.replace('#',''), 16); }
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const c = g.children.pop();
+    if (c.children && c.children.length) disposeGroup(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+      else c.material.dispose();
+    }
+  }
+}
+
+// ============================================================
+//  TEXTURA PROCEDURAL DE HORMIGÓN
+// ============================================================
+function makeConcreteTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 1024;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#c8c8c2';
+  ctx.fillRect(0, 0, 1024, 1024);
+
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 1024;
+    const r = 40 + Math.random() * 120;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const v = 175 + Math.random() * 45;
+    g.addColorStop(0, `rgba(${v},${v},${v-10},0.18)`);
+    g.addColorStop(1, `rgba(${v},${v},${v-10},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 25000; i++) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 1024;
+    const v = 150 + Math.random() * 80;
+    ctx.fillStyle = `rgba(${v},${v},${v-8},${Math.random() * 0.4})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  ctx.strokeStyle = 'rgba(150,150,145,0.5)';
+  ctx.lineWidth = 2;
+  const cells = 4;
+  for (let i = 0; i <= cells; i++) {
+    const p = i * (1024 / cells);
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, 1024); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(1024, p); ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+let concreteTex = null;
+
+// ============================================================
+//  CONSTRUCCIÓN DE LA BODEGA
+// ============================================================
+function buildWarehouse(snap) {
+  disposeGroup(warehouseGroup);
+  interactables = [];
+
+  const { width, depth } = snap;
+  const gridW = width * CELL + LANE;
+  const gridD = depth * CELL;
+  const buildingW = gridW + BUILDING_MARGIN * 2;
+  const buildingD = gridD + BUILDING_MARGIN * 2;
+
+  // === PISO ===
+  if (!concreteTex) concreteTex = makeConcreteTexture();
+  const floorGeo = new THREE.PlaneGeometry(buildingW, buildingD);
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: concreteTex, color: 0xffffff, roughness: 0.85, metalness: 0.05
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  warehouseGroup.add(floor);
+
+    // === FRANJA AMARILLA PEATONAL (pasillo central, de pared a pared) ===
+  if (!hatchTex) hatchTex = makeHatchTexture();
+  hatchTex.repeat.set(1, buildingD / LANE);
+  const laneX = -gridW/2 + Math.ceil(width / 2) * CELL + LANE/2;
+  const lane = new THREE.Mesh(
+    new THREE.PlaneGeometry(LANE, buildingD),
+    new THREE.MeshBasicMaterial({ map: hatchTex })
+  );
+  lane.rotation.x = -Math.PI / 2;
+  lane.position.set(laneX, 0.012, 0);
+  warehouseGroup.add(lane);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffe04a });
+  for (const sx of [-1, 1]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, buildingD), edgeMat);
+    edge.position.set(laneX + sx * (LANE/2), 0.018, 0);
+    warehouseGroup.add(edge);
+  }
+
+  // === PAREDES ===
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0xd0d0c8, roughness: 0.92, metalness: 0.03, side: THREE.DoubleSide
+  });
+  const wallT = 0.3;
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(buildingW, WALL_HEIGHT, wallT), wallMat);
+  backWall.position.set(0, WALL_HEIGHT/2, -buildingD/2);
+  backWall.receiveShadow = true;
+  warehouseGroup.add(backWall);
+
+  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, WALL_HEIGHT, buildingD), wallMat);
+  leftWall.position.set(-buildingW/2, WALL_HEIGHT/2, 0);
+  leftWall.receiveShadow = true;
+  warehouseGroup.add(leftWall);
+
+  const rightWall = leftWall.clone();
+  rightWall.position.x = buildingW/2;
+  warehouseGroup.add(rightWall);
+
+  const baseboardMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
+  const baseboardH = 0.4;
+  const baseback = new THREE.Mesh(new THREE.BoxGeometry(buildingW, baseboardH, 0.05), baseboardMat);
+  baseback.position.set(0, baseboardH/2, -buildingD/2 + 0.2);
+  warehouseGroup.add(baseback);
+
+  // === TECHO Y VIGAS ===
+  const roofMat = new THREE.MeshStandardMaterial({
+    color: 0x8a9098, roughness: 0.7, metalness: 0.5, side: THREE.DoubleSide
+  });
+  const roof = new THREE.Mesh(new THREE.PlaneGeometry(buildingW, buildingD), roofMat);
+  roof.rotation.x = Math.PI / 2;
+  roof.position.y = WALL_HEIGHT;
+  warehouseGroup.add(roof);
+
+  const beamMat = new THREE.MeshStandardMaterial({
+    color: 0x606870, metalness: 0.75, roughness: 0.35
+  });
+  const beamCount = Math.ceil(buildingD / 4);
+  for (let i = 0; i < beamCount; i++) {
+    const z = -buildingD/2 + (i + 0.5) * (buildingD / beamCount);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(buildingW, 0.3, 0.3), beamMat);
+    beam.position.set(0, WALL_HEIGHT - 0.4, z);
+    beam.castShadow = true;
+    warehouseGroup.add(beam);
+  }
+  const mainBeam = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, buildingD), beamMat);
+  mainBeam.position.set(0, WALL_HEIGHT - 0.25, 0);
+  warehouseGroup.add(mainBeam);
+
+  // === LUCES FLUORESCENTES ===
+  const lightBoxMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, emissive: 0xfffbe8, emissiveIntensity: 2.5
+  });
+  const lightFrameMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const cableMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+
+  const lightRows = Math.max(2, Math.floor(depth / 2) + 1);
+  const lightCols = Math.max(2, Math.floor(width / 2) + 1);
+  for (let i = 0; i < lightCols; i++) {
+    for (let j = 0; j < lightRows; j++) {
+      const lx = -gridW/2 + (i + 0.5) * gridW / lightCols;
+      const lz = -gridD/2 + (j + 0.5) * gridD / lightRows;
+
+      const lightBox = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.18, 0.6), lightBoxMat);
+      lightBox.position.set(lx, WALL_HEIGHT - 1.4, lz);
+      warehouseGroup.add(lightBox);
+
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.1, 0.8), lightFrameMat);
+      frame.position.set(lx, WALL_HEIGHT - 1.5, lz);
+      warehouseGroup.add(frame);
+
+      for (const off of [-1.2, 1.2]) {
+        const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.0), cableMat);
+        cable.position.set(lx + off, WALL_HEIGHT - 0.9, lz);
+        warehouseGroup.add(cable);
+      }
+
+      if ((i + j) % 2 === 0) {
+        const pl = new THREE.PointLight(0xfff6dc, 0.8, 35);
+        pl.position.set(lx, WALL_HEIGHT - 2.2, lz);
+        warehouseGroup.add(pl);
+      }
+    }
+  }
+
+  // === MARCADO DE SLOTS ===
+  const slotMat = new THREE.MeshBasicMaterial({
+    color: 0xf2c218, transparent: true, opacity: 0.6
+  });
+  const slotThickness = 0.08;
+  const slotInset = 0.15;
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < depth; y++) {
+      const { px, pz } = slotWorld(x, y, snap);
+      const s = CELL/2 - slotInset;
+
+      const mk = (geo, ox, oz) => {
+        const m = new THREE.Mesh(geo, slotMat);
+        m.position.set(px + ox, 0.008, pz + oz);
+        warehouseGroup.add(m);
+      };
+      mk(new THREE.BoxGeometry(s*2, 0.012, slotThickness), 0, -s);
+      mk(new THREE.BoxGeometry(s*2, 0.012, slotThickness), 0, s);
+      mk(new THREE.BoxGeometry(slotThickness, 0.012, s*2), -s, 0);
+      mk(new THREE.BoxGeometry(slotThickness, 0.012, s*2), s, 0);
+
+      const hit = new THREE.Mesh(
+        new THREE.BoxGeometry(CELL, PALLET_CARGO_H + PALLET_BASE_H + 0.4, CELL),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+      );
+      hit.position.set(px, 0.8, pz);
+      hit.userData = { x, y, level: 0 };
+      warehouseGroup.add(hit);
+      interactables.push(hit);
+    }
+  }
+
+  for (const p of snap.pallets) {
+    warehouseGroup.add(createPalletMesh(p, snap));
+  }
+
+  if (selected && selected.x < width && selected.y < depth) {
+    addSelectionHighlight(selected, snap);
+  } else {
+    selected = null;
+  }
+}
+
+function createPalletMesh(p, snap) {
+  const { width, depth } = snap;
+  const gridW = width * CELL;
+  const gridD = depth * CELL;
+  const { px, pz } = slotWorld(p.x, p.y, snap);
+
+  const meta = snap.product_types[p.product] || { color: '#c98a3a' };
+  const cargoColor = hexToInt(meta.color);
+
+  const group = new THREE.Group();
+
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0xa07a55, roughness: 0.95 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(PALLET_SIZE, PALLET_BASE_H, PALLET_SIZE), woodMat);
+  base.position.y = PALLET_BASE_H / 2;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0xb89068, roughness: 0.92 });
+  for (let i = 0; i < 4; i++) {
+    const board = new THREE.Mesh(new THREE.BoxGeometry(PALLET_SIZE, 0.03, PALLET_SIZE / 5), boardMat);
+    board.position.set(0, PALLET_BASE_H + 0.015, (i - 1.5) * PALLET_SIZE / 4);
+    board.receiveShadow = true;
+    group.add(board);
+  }
+
+  const layers = 3;
+  const perLayer = 2;
+  const boxSize = PALLET_SIZE / perLayer - 0.06;
+  const layerH = PALLET_CARGO_H / layers;
+
+  const boxMat = new THREE.MeshStandardMaterial({ color: cargoColor, roughness: 0.85, metalness: 0.02 });
+  const boxMatDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(cargoColor).multiplyScalar(0.72), roughness: 0.88 });
+  const tapeMat = new THREE.MeshStandardMaterial({ color: 0xe4d49a, roughness: 0.7 });
+  const labelMat = new THREE.MeshBasicMaterial({ color: 0xf5f0e0 });
+
+  for (let l = 0; l < layers; l++) {
+    for (let bx = 0; bx < perLayer; bx++) {
+      for (let bz = 0; bz < perLayer; bz++) {
+        const bg = new THREE.Group();
+        const mat = (l + bx + bz) % 3 === 0 ? boxMatDark : boxMat;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(boxSize, layerH - 0.02, boxSize), mat);
+        box.castShadow = true;
+        box.receiveShadow = true;
+        bg.add(box);
+
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(boxSize * 1.01, 0.008, boxSize * 0.18), tapeMat);
+        tape.position.y = (layerH - 0.02) / 2 + 0.008;
+        bg.add(tape);
+
+        const label = new THREE.Mesh(new THREE.BoxGeometry(boxSize * 0.35, boxSize * 0.25, 0.005), labelMat);
+        label.position.set(0, 0, boxSize / 2 + 0.003);
+        bg.add(label);
+
+        const ox = (bx - (perLayer - 1) / 2) * (boxSize + 0.06);
+        const oz = (bz - (perLayer - 1) / 2) * (boxSize + 0.06);
+        bg.position.set(ox, PALLET_BASE_H + layerH * l + layerH / 2, oz);
+        group.add(bg);
+      }
+    }
+  }
+
+  const filmMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.15, metalness: 0.2 });
+  const film = new THREE.Mesh(new THREE.BoxGeometry(PALLET_SIZE * 1.02, PALLET_CARGO_H, PALLET_SIZE * 1.02), filmMat);
+  film.position.y = PALLET_BASE_H + PALLET_CARGO_H / 2;
+  group.add(film);
+
+  group.position.set(px, 0, pz);
+  group.userData = { isPallet: true, x: p.x, y: p.y, level: p.level, product: p.product };
+  return group;
+}
+
+function addSelectionHighlight(sel, snap) {
+  const { width, depth } = snap;
+  const gridW = width * CELL;
+  const gridD = depth * CELL;
+  const { px, pz } = slotWorld(sel.x, sel.y, snap);
+
+  const geo = new THREE.BoxGeometry(CELL - 0.1, PALLET_CARGO_H + PALLET_BASE_H + 0.3, CELL - 0.1);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x00ff88, wireframe: true, transparent: true, opacity: 0.9 });
+  const hl = new THREE.Mesh(geo, mat);
+  hl.position.set(px, (PALLET_CARGO_H + PALLET_BASE_H) / 2, pz);
+  hl.name = 'selection-highlight';
+  warehouseGroup.add(hl);
+}
+
+function refreshHighlight() {
+  const old = warehouseGroup.getObjectByName('selection-highlight');
+  if (old) {
+    warehouseGroup.remove(old);
+    old.geometry.dispose(); old.material.dispose();
+  }
+  if (selected && state) addSelectionHighlight(selected, state);
+}
+
+// ============================================================
+//  INTERACCIÓN
+// ============================================================
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (e.button !== 0) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(interactables, false);
+  if (hits.length > 0) {
+    const d = hits[0].object.userData;
+    onCellClick({ x: d.x, y: d.y, level: 0 });
+  }
+});
+
+function onCellClick(pos) {
+  if (movingFrom) {
+    if (pos.x === movingFrom.x && pos.y === movingFrom.y) {
+      log('Origen y destino son la misma posición.', 'err');
+      movingFrom = null; updateSelInfo(); return;
+    }
+    doMove(movingFrom, pos);
+    movingFrom = null; updateSelInfo(); return;
+  }
+  selected = pos;
+  refreshHighlight();
+  updateSelInfo();
+}
+
+// ============================================================
+//  API
+// ============================================================
+async function api(path, method='GET', body=null) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+async function fetchState() {
+  const r = await api('/api/state');
+  if (r.ok) applyState(r.data);
+}
+
+// Estado de la cámara headless (worker en el servidor)
+async function pollCamStatus() {
+  const box = $('cam-status');
+  const txt = $('cam-status-text');
+  try {
+    const r = await fetch('/api/camera/status', { cache: 'no-store' });
+    const s = await r.json();
+    box.classList.remove('ok', 'err');
+    if (s.worker_ready) {
+      box.classList.add('ok');
+      txt.textContent = `Cámara headless activa (${s.frames} frames)`;
+    } else if (s.worker_error) {
+      box.classList.add('err');
+      txt.textContent = 'Error: ' + s.worker_error;
+    } else {
+      txt.textContent = 'Iniciando cámara headless...';
+    }
+  } catch (e) {
+    box.classList.remove('ok'); box.classList.add('err');
+    txt.textContent = 'Sin respuesta del servidor';
+  }
+}
+function updateCamStatus() {}
+
+// Evita reconstruir la escena si nada cambió (el polling corre cada 4 s)
+let lastSig = '';
+function signature(snap) {
+  return JSON.stringify([snap.width, snap.depth, snap.levels, snap.pallets]);
+}
+
+function applyState(snap) {
+  state = snap;
+  $('cap-big').textContent = snap.capacity;
+  $('cap-formula').textContent = `${snap.width} × ${snap.depth} × ${snap.levels} = ${snap.capacity} posiciones`;
+  $('m-occ').textContent = snap.occupied;
+  $('m-free').textContent = snap.free;
+  $('m-pct').textContent = snap.occupancy_pct.toFixed(1) + '%';
+  $('m-min').textContent = snap.min_pallets;
+  $('m-thr').textContent = snap.min_threshold_pct.toFixed(0) + '%';
+
+  const st = $('m-status');
+  st.className = 'status ' + snap.status;
+  const estadoTxt = ({ vacia:'VACÍA', bajo_minimo:'BAJO EL MÍNIMO', en_rango:'EN RANGO', llena:'LLENA' })[snap.status] || snap.status;
+  st.textContent = estadoTxt;
+  $('m-state-val').textContent = estadoTxt;
+
+  // No pisar los campos mientras el usuario los edita
+  const ae = document.activeElement;
+  if (!ae || !['cfg-w','cfg-d','cfg-l','cfg-thr'].includes(ae.id)) {
+    $('cfg-w').value = snap.width;
+    $('cfg-d').value = snap.depth;
+    $('cfg-l').value = snap.levels;
+    $('cfg-thr').value = snap.min_threshold_pct;
+    $('preview-cap').textContent = `Capacidad resultante: ${snap.width * snap.depth * snap.levels} posiciones`;
+  }
+
+  const selProd = $('sel-product');
+  if (selProd.options.length === 0) {
+    for (const [k, v] of Object.entries(snap.product_types)) {
+      const o = document.createElement('option');
+      o.value = k; o.textContent = v.label;
+      selProd.appendChild(o);
+    }
+  }
+
+  // IPs (si el servidor informa su IP LAN, se usa esa)
+  const host = snap.server_ip || location.hostname;
+  const port = location.port || '8080';
+  $('ip-local').textContent = host;
+  $('ip-port').textContent = port;
+  $('ip-cam-url').textContent = `http://${host}:${port}/video.mjpg`;
+
+  updateCamStatus(snap);
+
+  const sig = signature(snap);
+  if (sig !== lastSig) {
+    lastSig = sig;
+    buildWarehouse(snap);
+  }
+  updateSelInfo();
+}
+
+function updateSelInfo() {
+  const info = $('sel-info');
+  if (movingFrom) {
+    info.innerHTML = `Moviendo desde <b>(${movingFrom.x}, ${movingFrom.y})</b>.<br>Haga clic en una posición libre de destino.`;
+    $('btn-move').disabled = true;
+    $('btn-cancel').disabled = false;
+    return;
+  }
+  if (!selected) {
+    info.textContent = 'Ningún pallet seleccionado.';
+  } else {
+    const p = state.pallets.find(p => p.x === selected.x && p.y === selected.y);
+    const status = p ? `OCUPADA — ${state.product_types[p.product].label}` : 'LIBRE';
+    info.innerHTML = `Selección: <b>(${selected.x}, ${selected.y})</b><br>Estado: ${status}`;
+  }
+  const sel = !!selected;
+  $('btn-add').disabled = !sel;
+  $('btn-remove').disabled = !sel;
+  $('btn-move').disabled = !sel;
+  $('btn-cancel').disabled = !(movingFrom || selected);
+}
+
+// ============================================================
+//  ACCIONES
+// ============================================================
+$('btn-add').onclick = async () => {
+  if (!selected) return;
+  const product = $('sel-product').value;
+  const r = await api('/api/slot', 'POST', { action:'add', x:selected.x, y:selected.y, level:0, product });
+  if (r.data.ok) { log(r.data.message, 'ok'); applyState(r.data.state); }
+  else log(r.data.message || 'Error al agregar', 'err');
+};
+
+$('btn-remove').onclick = async () => {
+  if (!selected) return;
+  const r = await api('/api/slot', 'POST', { action:'remove', x:selected.x, y:selected.y, level:0 });
+  if (r.data.ok) { log(r.data.message, 'ok'); applyState(r.data.state); }
+  else log(r.data.message || 'Error al retirar', 'err');
+};
+
+$('btn-move').onclick = () => {
+  if (!selected) return;
+  const p = state.pallets.find(p => p.x === selected.x && p.y === selected.y);
+  if (!p) { log('La posición de origen está vacía.', 'err'); return; }
+  movingFrom = { ...selected };
+  log('Seleccione la posición de destino...');
+  updateSelInfo();
+};
+
+$('btn-cancel').onclick = () => {
+  movingFrom = null;
+  selected = null;
+  refreshHighlight();
+  updateSelInfo();
+  log('Selección cancelada.');
+};
+
+async function doMove(src, dst) {
+  const r = await api('/api/slot', 'POST', {
+    action:'move',
+    src:{ x:src.x, y:src.y, level:0 },
+    dst:{ x:dst.x, y:dst.y, level:0 }
+  });
+  if (r.data.ok) { log(r.data.message, 'ok'); selected = { ...dst }; applyState(r.data.state); }
+  else log(r.data.message || 'Error al mover', 'err');
+}
+
+$('btn-config').onclick = async () => {
+  const body = {
+    width: parseInt($('cfg-w').value),
+    depth: parseInt($('cfg-d').value),
+    levels: parseInt($('cfg-l').value),
+    min_threshold_pct: parseFloat($('cfg-thr').value)
+  };
+  const r = await api('/api/config', 'POST', body);
+  if (r.data.ok) { log(r.data.message, 'ok'); selected = null; movingFrom = null; applyState(r.data.state); }
+  else log(r.data.message || 'Error de configuración', 'err');
+};
+
+$('btn-clear').onclick = async () => {
+  if (!confirm('¿Vaciar la bodega? Se retirarán todos los pallets.')) return;
+  const r = await api('/api/clear', 'POST');
+  if (r.data.ok) { log(r.data.message, 'ok'); selected = null; movingFrom = null; applyState(r.data.state); }
+  else log(r.data.message || 'Error al vaciar', 'err');
+};
+
+// ============================================================
+//  GENERACIÓN ALEATORIA
+// ============================================================
+async function generateRandom(count) {
+  if (!state) return;
+  const freeSlots = [];
+  for (let x = 0; x < state.width; x++) {
+    for (let y = 0; y < state.depth; y++) {
+      for (let level = 0; level < state.levels; level++) {
+        const exists = state.pallets.find(p => p.x===x && p.y===y && p.level===level);
+        if (!exists) freeSlots.push({ x, y, level });
+      }
+    }
+  }
+  if (freeSlots.length === 0) {
+    log('No hay posiciones libres.', 'err');
+    return;
+  }
+  const toPlace = Math.min(count, freeSlots.length);
+  for (let i = freeSlots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [freeSlots[i], freeSlots[j]] = [freeSlots[j], freeSlots[i]];
+  }
+  const products = Object.keys(state.product_types);
+  let placed = 0;
+  for (let i = 0; i < toPlace; i++) {
+    const slot = freeSlots[i];
+    const product = products[Math.floor(Math.random() * products.length)];
+    const r = await api('/api/slot', 'POST', {
+      action: 'add', x: slot.x, y: slot.y, level: slot.level, product
+    });
+    if (r.data.ok) placed++;
+  }
+  log(`${placed} pallets generados aleatoriamente.`, 'ok');
+  await fetchState();
+}
+
+$('btn-gen-random').onclick = () => {
+  const count = parseInt($('gen-count').value) || 20;
+  generateRandom(count);
+};
+
+$('btn-gen-fill').onclick = () => {
+  if (!state) return;
+  const freeCount = state.capacity - state.occupied;
+  if (freeCount <= 0) { log('La bodega ya está llena.', 'err'); return; }
+  generateRandom(freeCount);
+};
+
+['cfg-w','cfg-d','cfg-l'].forEach(id => {
+  $(id).addEventListener('input', () => {
+    const w = parseInt($('cfg-w').value) || 0;
+    const d = parseInt($('cfg-d').value) || 0;
+    const l = parseInt($('cfg-l').value) || 0;
+    $('preview-cap').textContent = `Capacidad resultante: ${w*d*l} posiciones`;
+  });
+});
+
+// ============================================================
+//  RESIZE / LOOP
+//  (La cámara virtual ya NO se renderiza aquí: la genera el
+//   worker headless del servidor a partir de /viewer3d)
+// ============================================================
+function resize() {
+  const w = $('canvas-wrap').clientWidth;
+  const h = $('canvas-wrap').clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+// ============================================================
+//  INICIO
+// ============================================================
+(async () => {
+  await fetchState();
+  resize();
+  animate();
+  log('Aplicación iniciada. Planta única sin racks.', 'ok');
+  setInterval(fetchState, 4000);
+  pollCamStatus();
+  setInterval(pollCamStatus, 2000);
+})();
+</script>
+</body>
+</html>

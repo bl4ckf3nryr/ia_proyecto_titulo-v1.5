@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel de supervisor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="pagina pagina--admin">
+  <main class="tarjeta tarjeta--admin">
+    <header class="encabezado">
+      <h1>🎛️ Panel de supervisor</h1>
+      <p id="supervisor-info" class="subtitulo">—</p>
+    </header>
+
+    <!-- ── Sección: Departamentos ── -->
+    <section class="admin-seccion">
+      <h2 class="admin-subtitulo">Departamentos</h2>
+
+      <form id="crear-departamento-form" class="admin-form admin-form--inline supervisor-form">
+        <div class="campo campo--flex">
+          <label for="depto-nombre">Nombre del departamento</label>
+          <input type="text" id="depto-nombre" name="nombre"
+                 placeholder="Ej: Seguridad" required />
+        </div>
+        <button type="submit" class="boton boton--primario boton--sm boton--auto">
+          <span class="btn-text">Crear departamento</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+        <p id="depto-message" class="mensaje" role="alert" aria-live="polite"></p>
+      </form>
+
+      <div id="lista-departamentos" class="tabla-usuarios supervisor-tabla">
+        <p class="tabla-vacia">Cargando departamentos...</p>
+      </div>
+    </section>
+
+    <!-- ── Sección: Cámaras ── -->
+    <section class="admin-seccion">
+      <div class="admin-seccion-header">
+        <h2 class="admin-subtitulo">Cámaras</h2>
+        <button id="refrescar-btn" class="boton boton--secundario boton--sm">
+          ↻ Refrescar
+        </button>
+      </div>
+
+      <form id="crear-camara-form" class="admin-form supervisor-form">
+        <div class="campo">
+          <label for="camara-nombre">Nombre de la cámara</label>
+          <input type="text" id="camara-nombre" name="nombre"
+                 placeholder="Ej: Entrada principal" required />
+        </div>
+
+        <div class="campo">
+          <label for="camara-url">URL del stream</label>
+          <input type="url" id="camara-url" name="url_stream"
+                 placeholder="rtsp://... o http://..." required />
+        </div>
+
+        <div class="campo">
+          <label for="camara-depto">Departamento</label>
+          <select id="camara-depto" name="departamento_id" class="select-campo">
+            <option value="">— Selecciona un departamento —</option>
+          </select>
+        </div>
+
+        <button type="submit" class="boton boton--primario">
+          <span class="btn-text">Crear cámara</span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+        <p id="camara-message" class="mensaje" role="alert" aria-live="polite"></p>
+      </form>
+
+      <div id="tabla-camaras" class="tabla-usuarios supervisor-tabla">
+        <p class="tabla-vacia">Cargando cámaras...</p>
+      </div>
+    </section>
+
+    <footer class="admin-footer">
+      <button id="logout-btn" class="boton boton--peligro">
+        Cerrar sesión
+      </button>
+    </footer>
+  </main>
+
+  <!-- ── Modal para ver cámara ── -->
+  <div id="modal-camara" class="modal" aria-hidden="true" role="dialog">
+    <div class="modal-contenido">
+      <header class="modal-header">
+        <h2 id="modal-titulo">Cámara</h2>
+        <button id="modal-cerrar" class="boton boton--secundario boton--sm" aria-label="Cerrar">✕</button>
+      </header>
+
+      <div class="modal-video-wrapper">
+        <video id="modal-video" controls autoplay muted playsinline></video>
+        <img id="modal-img" alt="Stream de cámara"
+             style="display:none; width:100%; height:100%; object-fit:contain; background:#000;" />
+        <p id="modal-error" class="mensaje mensaje--error" role="alert"></p>
+      </div>
+
+      <!-- ── NUEVO v1.3: Detección YOLO ── -->
+      <button id="modal-detectar" class="boton boton--primario boton--sm">
+        🔍 Detectar objetos
+      </button>
+      <div id="modal-detecciones" class="modal-detecciones"></div>
+
+      <p id="modal-url" class="modal-url"></p>
+    </div>
+  </div>
+
+  <!-- hls.js opcional: solo necesario para streams .m3u8 -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script src="/static/supervisor.js"></script>
+</body>
+</html>

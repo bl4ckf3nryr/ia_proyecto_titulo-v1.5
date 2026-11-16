@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Learning — Calibración de la IA</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .l-contenedor { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+    .l-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .l-tarjeta { border: 1px solid rgba(128,128,128,.35); border-radius: 10px; padding: 1rem; margin-top: 1rem; }
+    .l-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+    .l-cams { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .75rem; margin-top: .75rem; }
+    .l-cam { border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .75rem; cursor: pointer; }
+    .l-cam:hover { border-color: #c9a227; }
+    .l-cam.sel { border: 2px solid #c9a227; background: rgba(201,162,39,.10); }
+    .l-chip { display: inline-block; font-size: .78rem; padding: .1rem .5rem; margin: .25rem .25rem 0 0; border-radius: 99px; background: rgba(128,128,128,.18); }
+    .l-img { width: 100%; min-height: 160px; background: rgba(128,128,128,.15); border-radius: 8px; display: block; object-fit: contain; }
+    .l-fila { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; align-items: center; }
+    .l-ajuste { margin-top: .75rem; }
+    .l-ajuste label { display: block; font-weight: 600; }
+    .l-ajuste input[type=range] { width: 100%; }
+    .l-ayuda { font-size: .85rem; opacity: .75; margin: .15rem 0 0; }
+    .l-resultado-titulo { font-size: 1.15rem; font-weight: 700; margin: 0 0 .5rem; }
+    .l-drop { border: 2px dashed rgba(128,128,128,.5); border-radius: 8px; padding: 1rem; text-align: center; margin-top: .75rem; }
+    .l-drop.sobre { border-color: #c9a227; background: rgba(201,162,39,.10); }
+    .l-galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .6rem; margin-top: .75rem; }
+    .l-ej { margin: 0; border: 1px solid rgba(128,128,128,.35); border-radius: 8px; padding: .4rem; }
+    .l-ej img { width: 100%; height: 100px; object-fit: cover; border-radius: 6px; display: block; }
+    .l-ej figcaption { font-size: .8rem; margin-top: .25rem; }
+    .l-ej .l-fila { margin-top: .35rem; gap: .25rem; }
+    .l-tabla { border-collapse: collapse; width: 100%; margin-top: .5rem; font-size: .9rem; }
+    .l-tabla th, .l-tabla td { border: 1px solid rgba(128,128,128,.35); padding: .3rem .5rem; text-align: left; }
+    .l-scroll { max-height: 260px; overflow: auto; }
+    select, textarea, input[type=number] { padding: .5rem; }
+    textarea { width: 100%; min-height: 70px; }
+  </style>
+</head>
+<body>
+  <div class="l-contenedor">
+    <div class="l-cabecera">
+      <div>
+        <h1>Calibración de la IA</h1>
+        <p id="learning-info" class="l-ayuda"></p>
+      </div>
+      <button id="logout-btn" type="button" class="boton boton--peligro">Cerrar sesión</button>
+    </div>
+
+    <div class="l-tarjeta">
+      <h2>Cámaras registradas</h2>
+      <div class="l-fila">
+        <button id="btn-escanear" type="button" class="boton boton--primario">Comprobar conexión de todas</button>
+        <span class="l-ayuda">Aparecen todas las cámaras de la base de datos. Elige una para trabajar con ella.</span>
+      </div>
+      <div id="camaras" class="l-cams"></div>
+      <p id="msg" class="mensaje"></p>
+    </div>
+
+    <div class="l-grid">
+      <div class="l-tarjeta">
+        <h2>1. Foto de la habitación vacía</h2>
+        <p class="l-ayuda">Deja la habitación sin nada, revisa la imagen actual y guárdala. La cámara no debe moverse después.</p>
+        <p style="margin:.5rem 0 .25rem"><strong>Imagen actual</strong></p>
+        <img id="img-actual" class="l-img" alt="Imagen actual de la cámara">
+        <div class="l-fila">
+          <button id="btn-frame" type="button" class="boton">Actualizar imagen</button>
+          <button id="btn-vacia" type="button" class="boton boton--primario">Guardar como vacía</button>
+        </div>
+        <p style="margin:1rem 0 .25rem"><strong>Foto vacía guardada</strong> <span id="ref-estado" class="l-ayuda"></span></p>
+        <img id="img-ref" class="l-img" alt="Foto de la habitación vacía">
+      </div>
+
+      <div class="l-tarjeta">
+        <h2>2. Fotos de ejemplo</h2>
+        <p class="l-ayuda">Ejemplos para la cámara elegida. Sirven para evaluar y para ajustar la sensibilidad automáticamente.</p>
+        <div class="l-fila">
+          <label for="ej-etiqueta">Estas fotos son:</label>
+          <select id="ej-etiqueta">
+            <option value="vacia">Habitación vacía</option>
+            <option value="con_cosas">Habitación con cosas</option>
+          </select>
+        </div>
+        <div id="zona" class="l-drop">
+          Arrastra fotos aquí o
+          <input id="ej-archivos" type="file" accept="image/*" multiple>
+        </div>
+        <div class="l-fila">
+          <button id="btn-capturar" type="button" class="boton boton--primario">Capturar de la cámara</button>
+          <label for="cap-cant">Cantidad</label>
+          <input id="cap-cant" type="number" min="1" max="10" value="3" style="width:4.5rem">
+          <label for="cap-pausa">Pausa (s)</label>
+          <input id="cap-pausa" type="number" min="1" max="30" value="2" style="width:4.5rem">
+        </div>
+        <p id="ej-conteo" class="l-ayuda"></p>
+        <div id="galeria" class="l-galeria"></div>
+      </div>
+    </div>
+
+    <div class="l-grid">
+      <div class="l-tarjeta">
+        <h2>3. Prueba y sensibilidad</h2>
+        <p class="l-ayuda">Prueba con la cámara en vivo o con una foto tuya. Los valores se guardan en el estado y se aplican a toda la aplicación al pulsar Guardar sensibilidad.</p>
+        <div class="l-ajuste">
+          <label for="umbral">Cuánto debe cambiar la profundidad: <span id="umbral-val"></span></label>
+          <input id="umbral" type="range" min="0.02" max="0.60" step="0.01">
+          <p class="l-ayuda">Más alto ignora cambios pequeños (sombras, luz). Más bajo detecta objetos más planos.</p>
+        </div>
+        <div class="l-ajuste">
+          <label for="area">Área mínima para decir "hay cosas": <span id="area-val"></span> %</label>
+          <input id="area" type="range" min="0.1" max="20" step="0.1">
+          <p class="l-ayuda">Más alto: solo objetos grandes. Más bajo: detecta objetos chicos.</p>
+        </div>
+        <div class="l-fila">
+          <button id="btn-probar" type="button" class="boton boton--primario">Probar con la cámara</button>
+          <button id="btn-guardar-config" type="button" class="boton">Guardar sensibilidad</button>
+        </div>
+        <div class="l-fila">
+          <label for="prueba-archivo">Probar con una foto:</label>
+          <input id="prueba-archivo" type="file" accept="image/*">
+        </div>
+        <div id="resultado" style="margin-top:1rem"></div>
+      </div>
+
+      <div class="l-tarjeta">
+        <h2>4. Entrenar con los ejemplos</h2>
+        <p class="l-ayuda">La red de profundidad ya viene entrenada: aquí se mide su acierto con tus ejemplos y se buscan los mejores valores de sensibilidad. Puede tardar varios minutos.</p>
+        <div class="l-fila">
+          <label for="ent-alcance">Usar ejemplos de:</label>
+          <select id="ent-alcance">
+            <option value="camara">Solo la cámara elegida</option>
+            <option value="todas">Todas las cámaras calibradas</option>
+          </select>
+        </div>
+        <div class="l-fila">
+          <button id="btn-evaluar" type="button" class="boton">Evaluar con los valores actuales</button>
+          <button id="btn-buscar" type="button" class="boton boton--primario">Buscar mejores valores</button>
+          <button id="btn-aplicar" type="button" class="boton" hidden>Aplicar y guardar sugeridos</button>
+        </div>
+        <div id="ent-resultado" style="margin-top:1rem"></div>
+      </div>
+    </div>
+
+    <div class="l-tarjeta">
+      <h2>5. Estado y respaldo</h2>
+      <p class="l-ayuda">El estado (cámara elegida, sensibilidad, notas y último entrenamiento) se guarda solo en el servidor y se recupera al volver a entrar.</p>
+      <label for="notas"><strong>Notas de la cámara elegida</strong></label>
+      <textarea id="notas" placeholder="Ej.: ángulo, hora de la foto vacía, problemas de luz"></textarea>
+      <div class="l-fila">
+        <button id="btn-guardar-estado" type="button" class="boton boton--primario">Guardar estado ahora</button>
+        <a class="boton" href="/learning/exportar" download>Descargar respaldo (.zip)</a>
+        <span id="estado-info" class="l-ayuda"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/learning.js"></script>
+</body>
+</html>

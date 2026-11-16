@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Viewer 3D (headless)</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0e1014; overflow: hidden; }
+  canvas#camera-canvas { display: block; width: 1280px; height: 720px; }
+</style>
+</head>
+<body>
+<!-- Canvas 2D final (escena 3D + HUD). El worker captura ESTE canvas. -->
+<canvas id="camera-canvas" width="1280" height="720"></canvas>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const W = 1280, H = 720;
+const CELL = 3.2;
+const BUILDING_MARGIN = 2.5;
+const PALLET_SIZE = 2.6;
+const PALLET_BASE_H = 0.16;
+const PALLET_CARGO_H = 1.8;
+const WALL_HEIGHT = 10;
+const LANE = 2.6;               // ancho del pasillo peatonal central
+
+// Posición en el mundo de cada slot (x,y). Los slots de la mitad derecha
+// se desplazan LANE para dejar libre el pasillo peatonal central.
+function slotWorld(x, y, snap) {
+  const gridW = snap.width * CELL + LANE;
+  const gridD = snap.depth * CELL;
+  const left = Math.ceil(snap.width / 2);
+  const extra = x >= left ? LANE : 0;
+  return {
+    px: -gridW/2 + x * CELL + CELL/2 + extra,
+    pz: -gridD/2 + y * CELL + CELL/2
+  };
+}
+
+function makeHatchTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2c218';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = '#c99a0a';
+  for (let i = -128; i < 256; i += 32) {
+    g.beginPath();
+    g.moveTo(i, 128); g.lineTo(i + 16, 128);
+    g.lineTo(i + 144, 0); g.lineTo(i + 128, 0);
+    g.closePath(); g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+let hatchTex = null;
+const CAMERA_ID = 'CAM-BODEGA-01';
+const FPS = 10;
+
+const outCanvas = document.getElementById('camera-canvas');
+const outCtx = outCanvas.getContext('2d');
+
+// ------------------------------------------------------------
+//  Renderer (WebGL) -> se copia al canvas 2D con el HUD
+// ------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H, false);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;      // más liviano para software GL
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0e1014);
+scene.fog = new THREE.Fog(0x0e1014, 80, 200);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+scene.add(new THREE.HemisphereLight(0xdde8f0, 0x4a4a4a, 0.7));
+const dir = new THREE.DirectionalLight(0xfff6e8, 1.2);
+dir.position.set(35, 55, 30);
+dir.castShadow = true;
+dir.shadow.mapSize.set(1024, 1024);
+dir.shadow.camera.left = -60; dir.shadow.camera.right = 60;
+dir.shadow.camera.top = 60;  dir.shadow.camera.bottom = -60;
+dir.shadow.camera.near = 1;  dir.shadow.camera.far = 150;
+dir.shadow.bias = -0.0004;
+scene.add(dir);
+
+const camSecurity = new THREE.PerspectiveCamera(82, W / H, 0.3, 300);
+const warehouse = new THREE.Group();
+scene.add(warehouse);
+
+function hexToInt(hex) { return parseInt(hex.replace('#', ''), 16); }
+
+function disposeGroup(g) {
+  while (g.children.length) {
+    const c = g.children.pop();
+    if (c.children && c.children.length) disposeGroup(c);
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+      else c.material.dispose();
+    }
+  }
+}
+
+// ------------------------------------------------------------
+//  Textura de hormigón
+// ------------------------------------------------------------
+function makeConcreteTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 1024;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#c8c8c2';
+  ctx.fillRect(0, 0, 1024, 1024);
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * 1024, y = Math.random() * 1024;
+    const r = 40 + Math.random() * 120;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    const v = 175 + Math.random() * 45;
+    g.addColorStop(0, `rgba(${v},${v},${v-10},0.18)`);
+    g.addColorStop(1, `rgba(${v},${v},${v-10},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  for (let i = 0; i < 25000; i++) {
+    const v = 150 + Math.random() * 80;
+    ctx.fillStyle = `rgba(${v},${v},${v-8},${Math.random() * 0.4})`;
+    ctx.fillRect(Math.random() * 1024, Math.random() * 1024, 1, 1);
+  }
+  ctx.strokeStyle = 'rgba(150,150,145,0.5)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 4; i++) {
+    const p = i * 256;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, 1024); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(1024, p); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 4);
+  tex.anisotropy = 4;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+let concreteTex = null;
+
+// ------------------------------------------------------------
+//  Construcción de la bodega
+// ------------------------------------------------------------
+function buildWarehouse(snap) {
+  disposeGroup(warehouse);
+  const { width, depth } = snap;
+  const gridW = width * CELL + LANE, gridD = depth * CELL;
+  const buildingW = gridW + BUILDING_MARGIN * 2;
+  const buildingD = gridD + BUILDING_MARGIN * 2;
+
+  if (!concreteTex) concreteTex = makeConcreteTexture();
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(buildingW, buildingD),
+    new THREE.MeshStandardMaterial({ map: concreteTex, color: 0xffffff, roughness: 0.85, metalness: 0.05 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  warehouse.add(floor);
+
+    // === FRANJA AMARILLA PEATONAL (pasillo central, de pared a pared) ===
+  if (!hatchTex) hatchTex = makeHatchTexture();
+  hatchTex.repeat.set(1, buildingD / LANE);
+  const laneX = -gridW/2 + Math.ceil(width / 2) * CELL + LANE/2;
+  const lane = new THREE.Mesh(
+    new THREE.PlaneGeometry(LANE, buildingD),
+    new THREE.MeshBasicMaterial({ map: hatchTex })
+  );
+  lane.rotation.x = -Math.PI / 2;
+  lane.position.set(laneX, 0.012, 0);
+  warehouse.add(lane);
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xffe04a });
+  for (const sx of [-1, 1]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, buildingD), edgeMat);
+    edge.position.set(laneX + sx * (LANE/2), 0.018, 0);
+    warehouse.add(edge);
+  }
+
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xd0d0c8, roughness: 0.92, metalness: 0.03, side: THREE.DoubleSide });
+  const wallT = 0.3;
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(buildingW, WALL_HEIGHT, wallT), wallMat);
+  backWall.position.set(0, WALL_HEIGHT/2, -buildingD/2);
+  backWall.receiveShadow = true;
+  warehouse.add(backWall);
+  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, WALL_HEIGHT, buildingD), wallMat);
+  leftWall.position.set(-buildingW/2, WALL_HEIGHT/2, 0);
+  leftWall.receiveShadow = true;
+  warehouse.add(leftWall);
+  const rightWall = leftWall.clone();
+  rightWall.position.x = buildingW/2;
+  warehouse.add(rightWall);
+
+  const baseboardMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.9 });
+  const baseback = new THREE.Mesh(new THREE.BoxGeometry(buildingW, 0.4, 0.05), baseboardMat);
+  baseback.position.set(0, 0.2, -buildingD/2 + 0.2);
+  warehouse.add(baseback);
+
+  const roof = new THREE.Mesh(
+    new THREE.PlaneGeometry(buildingW, buildingD),
+    new THREE.MeshStandardMaterial({ color: 0x8a9098, roughness: 0.7, metalness: 0.5, side: THREE.DoubleSide })
+  );
+  roof.rotation.x = Math.PI / 2;
+  roof.position.y = WALL_HEIGHT;
+  warehouse.add(roof);
+
+  const beamMat = new THREE.MeshStandardMaterial({ color: 0x606870, metalness: 0.75, roughness: 0.35 });
+  const beamCount = Math.ceil(buildingD / 4);
+  for (let i = 0; i < beamCount; i++) {
+    const z = -buildingD/2 + (i + 0.5) * (buildingD / beamCount);
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(buildingW, 0.3, 0.3), beamMat);
+    beam.position.set(0, WALL_HEIGHT - 0.4, z);
+    beam.castShadow = true;
+    warehouse.add(beam);
+  }
+  const mainBeam = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, buildingD), beamMat);
+  mainBeam.position.set(0, WALL_HEIGHT - 0.25, 0);
+  warehouse.add(mainBeam);
+
+  const lightBoxMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfffbe8, emissiveIntensity: 2.5 });
+  const lightFrameMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
+  const cableMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const lightRows = Math.max(2, Math.floor(depth / 2) + 1);
+  const lightCols = Math.max(2, Math.floor(width / 2) + 1);
+  for (let i = 0; i < lightCols; i++) {
+    for (let j = 0; j < lightRows; j++) {
+      const lx = -gridW/2 + (i + 0.5) * gridW / lightCols;
+      const lz = -gridD/2 + (j + 0.5) * gridD / lightRows;
+      const lightBox = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.18, 0.6), lightBoxMat);
+      lightBox.position.set(lx, WALL_HEIGHT - 1.4, lz);
+      warehouse.add(lightBox);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.1, 0.8), lightFrameMat);
+      frame.position.set(lx, WALL_HEIGHT - 1.5, lz);
+      warehouse.add(frame);
+      for (const off of [-1.2, 1.2]) {
+        const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.0), cableMat);
+        cable.position.set(lx + off, WALL_HEIGHT - 0.9, lz);
+        warehouse.add(cable);
+      }
+      if ((i + j) % 2 === 0) {
+        const pl = new THREE.PointLight(0xfff6dc, 0.8, 35);
+        pl.position.set(lx, WALL_HEIGHT - 2.2, lz);
+        warehouse.add(pl);
+      }
+    }
+  }
+
+  const slotMat = new THREE.MeshBasicMaterial({ color: 0xf2c218, transparent: true, opacity: 0.6 });
+  const st = 0.08, inset = 0.15;
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < depth; y++) {
+      const { px, pz } = slotWorld(x, y, snap);
+      const s = CELL/2 - inset;
+      const mk = (geo, ox, oz) => {
+        const m = new THREE.Mesh(geo, slotMat);
+        m.position.set(px + ox, 0.008, pz + oz);
+        warehouse.add(m);
+      };
+      mk(new THREE.BoxGeometry(s*2, 0.012, st), 0, -s);
+      mk(new THREE.BoxGeometry(s*2, 0.012, st), 0, s);
+      mk(new THREE.BoxGeometry(st, 0.012, s*2), -s, 0);
+      mk(new THREE.BoxGeometry(st, 0.012, s*2), s, 0);
+    }
+  }
+
+  for (const p of snap.pallets) warehouse.add(createPalletMesh(p, snap));
+
+  // Pose fija de la cámara (esquina superior de la nave)
+  camSecurity.position.set(-buildingW/2 + 0.8, WALL_HEIGHT - 0.7, -buildingD/2 + 0.8);
+  camSecurity.lookAt(buildingW/2 - 1, 0.8, buildingD/2 - 1);
+  camSecurity.aspect = W / H;
+  camSecurity.updateProjectionMatrix();
+}
+
+function createPalletMesh(p, snap) {
+  const gridW = snap.width * CELL, gridD = snap.depth * CELL;
+  const { px, pz } = slotWorld(p.x, p.y, snap);
+  const meta = (snap.product_types && snap.product_types[p.product]) || { color: '#c98a3a' };
+  const cargoColor = hexToInt(meta.color);
+
+  const group = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(PALLET_SIZE, PALLET_BASE_H, PALLET_SIZE),
+    new THREE.MeshStandardMaterial({ color: 0xa07a55, roughness: 0.95 })
+  );
+  base.position.y = PALLET_BASE_H / 2;
+  base.castShadow = true; base.receiveShadow = true;
+  group.add(base);
+
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0xb89068, roughness: 0.92 });
+  for (let i = 0; i < 4; i++) {
+    const board = new THREE.Mesh(new THREE.BoxGeometry(PALLET_SIZE, 0.03, PALLET_SIZE / 5), boardMat);
+    board.position.set(0, PALLET_BASE_H + 0.015, (i - 1.5) * PALLET_SIZE / 4);
+    board.receiveShadow = true;
+    group.add(board);
+  }
+
+  const layers = 3, perLayer = 2;
+  const boxSize = PALLET_SIZE / perLayer - 0.06;
+  const layerH = PALLET_CARGO_H / layers;
+  const boxMat = new THREE.MeshStandardMaterial({ color: cargoColor, roughness: 0.85, metalness: 0.02 });
+  const boxMatDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(cargoColor).multiplyScalar(0.72), roughness: 0.88 });
+  const tapeMat = new THREE.MeshStandardMaterial({ color: 0xe4d49a, roughness: 0.7 });
+  const labelMat = new THREE.MeshBasicMaterial({ color: 0xf5f0e0 });
+
+  for (let l = 0; l < layers; l++) {
+    for (let bx = 0; bx < perLayer; bx++) {
+      for (let bz = 0; bz < perLayer; bz++) {
+        const bg = new THREE.Group();
+        const mat = (l + bx + bz) % 3 === 0 ? boxMatDark : boxMat;
+        const box = new THREE.Mesh(new THREE.BoxGeometry(boxSize, layerH - 0.02, boxSize), mat);
+        box.castShadow = true; box.receiveShadow = true;
+        bg.add(box);
+        const tape = new THREE.Mesh(new THREE.BoxGeometry(boxSize * 1.01, 0.008, boxSize * 0.18), tapeMat);
+        tape.position.y = (layerH - 0.02) / 2 + 0.008;
+        bg.add(tape);
+        const label = new THREE.Mesh(new THREE.BoxGeometry(boxSize * 0.35, boxSize * 0.25, 0.005), labelMat);
+        label.position.set(0, 0, boxSize / 2 + 0.003);
+        bg.add(label);
+        const ox = (bx - (perLayer - 1) / 2) * (boxSize + 0.06);
+        const oz = (bz - (perLayer - 1) / 2) * (boxSize + 0.06);
+        bg.position.set(ox, PALLET_BASE_H + layerH * l + layerH / 2, oz);
+        group.add(bg);
+      }
+    }
+  }
+
+  const film = new THREE.Mesh(
+    new THREE.BoxGeometry(PALLET_SIZE * 1.02, PALLET_CARGO_H, PALLET_SIZE * 1.02),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.15, metalness: 0.2 })
+  );
+  film.position.y = PALLET_BASE_H + PALLET_CARGO_H / 2;
+  group.add(film);
+
+  group.position.set(px, 0, pz);
+  return group;
+}
+
+// ------------------------------------------------------------
+//  HUD (REC, ID, fecha/hora)
+// ------------------------------------------------------------
+function drawHud(ctx, w, h) {
+  const ts = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const fecha = `${ts.getFullYear()}-${pad(ts.getMonth()+1)}-${pad(ts.getDate())}`;
+  const hora = `${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
+
+  if ((Math.floor(ts.getTime() / 500) % 2) === 0) {
+    ctx.fillStyle = '#ff2a2a';
+    ctx.beginPath(); ctx.arc(32, 32, 10, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
+  ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#fff';
+  ctx.fillText('REC', 52, 40);
+  ctx.font = 'bold 20px monospace'; ctx.fillStyle = '#00e676';
+  ctx.fillText(CAMERA_ID, 20, 76);
+
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#fff';
+  ctx.fillText(fecha, w - 20, 40);
+  ctx.fillText(hora, w - 20, 70);
+  ctx.textAlign = 'left';
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+  const m = 26, l = 42;
+  ctx.beginPath();
+  ctx.moveTo(m, m + l); ctx.lineTo(m, m); ctx.lineTo(m + l, m);
+  ctx.moveTo(w - m - l, m); ctx.lineTo(w - m, m); ctx.lineTo(w - m, m + l);
+  ctx.moveTo(m, h - m - l); ctx.lineTo(m, h - m); ctx.lineTo(m + l, h - m);
+  ctx.moveTo(w - m - l, h - m); ctx.lineTo(w - m, h - m); ctx.lineTo(w - m, h - m - l);
+  ctx.stroke();
+
+  ctx.shadowBlur = 0;
+  ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#fff';
+  ctx.fillText(`${w}x${h}`, 20, h - 20);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${FPS} FPS`, w - 20, h - 20);
+  ctx.textAlign = 'left';
+}
+
+// ------------------------------------------------------------
+//  Estado + render
+// ------------------------------------------------------------
+let ready = false;
+let lastSig = '';
+let rendering = false;
+
+async function refreshState() {
+  try {
+    const res = await fetch('/api/state', { cache: 'no-store' });
+    if (!res.ok) return;
+    const snap = await res.json();
+    const sig = JSON.stringify([snap.width, snap.depth, snap.levels, snap.pallets]);
+    if (sig !== lastSig) {
+      lastSig = sig;
+      buildWarehouse(snap);
+      ready = true;
+    }
+  } catch (e) { /* se reintenta en el siguiente ciclo */ }
+}
+
+function renderFrame() {
+  if (!ready || rendering) return;
+  rendering = true;
+  try {
+    renderer.render(scene, camSecurity);
+    outCtx.drawImage(renderer.domElement, 0, 0, W, H);
+    drawHud(outCtx, W, H);
+    window.__lastFrameTs = Date.now();
+  } finally {
+    rendering = false;
+  }
+}
+
+// Para que el worker pueda pedir el frame directamente
+window.getFrame = (quality = 0.82) => outCanvas.toDataURL('image/jpeg', quality);
+window.__viewerReady = () => ready && !!window.__lastFrameTs;
+
+await refreshState();
+setInterval(refreshState, 1000);
+// setInterval (no requestAnimationFrame): en headless rAF puede pausarse
+setInterval(renderFrame, 1000 / FPS);
+</script>
+</body>
+</html>
