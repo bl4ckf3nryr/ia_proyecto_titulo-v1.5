@@ -30,34 +30,24 @@ if defined FALTA (
 )
 echo [OK] Archivos presentes.
 
-set "PY="
+:: Verificar si existe el .venv
 if exist ".venv\Scripts\python.exe" (
     set "PY=%CD%\.venv\Scripts\python.exe"
     echo [OK] Usando .venv existente.
 ) else (
-    echo Creando .venv ...
-    py -3 -m venv .venv >nul 2>nul
-    if exist ".venv\Scripts\python.exe" (
-        set "PY=%CD%\.venv\Scripts\python.exe"
-    ) else (
-        python -c "import sys" >nul 2>nul
-        if not errorlevel 1 set "PY=python"
-    )
-)
-if not defined PY (
-    echo [ERROR] No se encontro Python.
+    echo [ERROR] No se encontro la carpeta .venv en esta ruta.
+    echo Por favor, abre una terminal aqui y ejecuta: python -m venv .venv
     pause
     exit /b 1
 )
+
 echo Python: "%PY%"
 
+:: Intentar actualizar pip y dependencias con el entorno virtual
 "%PY%" -m pip install --upgrade pip >nul 2>nul
 
 echo Instalando dependencias ...
 "%PY%" -m pip install Flask Pillow playwright
-if errorlevel 1 (
-    "%PY%" -m pip install --user Flask Pillow playwright
-)
 
 echo Instalando Chromium para Playwright ...
 "%PY%" -m playwright install chromium
@@ -66,10 +56,12 @@ if errorlevel 1 (
     echo         La camara mostrara 'SIN SEÑAL' hasta resolverlo.
 )
 
+:: Matar el proceso si el puerto 8080 esta ocupado
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":8080" ^| findstr "LISTENING"') do (
     taskkill /F /PID %%P >nul 2>nul
 )
 
+:: Abrir el navegador despues de 5 segundos
 start "" /B cmd /c "timeout /t 5 >nul & start http://127.0.0.1:8080/"
 
 echo.

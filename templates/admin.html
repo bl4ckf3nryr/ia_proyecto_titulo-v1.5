@@ -33,6 +33,50 @@
       </form>
     </section>
 
+    <!-- ── Sección: Lista de empresas ── -->
+    <section class="admin-seccion">
+      <div class="admin-seccion-header">
+        <h2 class="admin-subtitulo">Empresas registradas</h2>
+        <button id="refrescar-empresas-btn" class="boton boton--secundario boton--sm">
+          ↻ Refrescar
+        </button>
+      </div>
+
+      <div id="tabla-empresas" class="tabla-usuarios">
+        <p class="tabla-vacia">Cargando empresas...</p>
+      </div>
+    </section>
+
+    <!-- ── Modal: Editar empresa ── -->
+    <div id="modal-empresa" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-empresa-titulo" hidden>
+      <div class="modal-contenido">
+        <h3 id="modal-empresa-titulo" class="admin-subtitulo">Editar empresa</h3>
+        <form id="editar-empresa-form" class="admin-form">
+          <input type="hidden" id="edit-empresa-id" />
+          <div class="campo">
+            <label for="edit-empresa-nombre">Nombre</label>
+            <input type="text" id="edit-empresa-nombre" required />
+          </div>
+          <div class="campo">
+            <label>
+              <input type="checkbox" id="edit-empresa-activa" />
+              Empresa activa
+            </label>
+          </div>
+          <div class="admin-form admin-form--inline">
+            <button type="submit" class="boton boton--primario boton--sm">
+              <span class="btn-text">Guardar cambios</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="cerrar-modal-empresa" class="boton boton--secundario boton--sm">
+              Cancelar
+            </button>
+          </div>
+          <p id="edit-empresa-message" class="mensaje" role="alert" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+
     <!-- ── Sección: Registrar usuario ── -->
     <section class="admin-seccion">
       <h2 class="admin-subtitulo">Registrar nuevo usuario</h2>
@@ -95,6 +139,51 @@
         <p class="tabla-vacia">Cargando usuarios...</p>
       </div>
     </section>
+
+    <!-- ── Modal: Editar usuario ── -->
+    <div id="modal-usuario" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-usuario-titulo" hidden>
+      <div class="modal-contenido">
+        <h3 id="modal-usuario-titulo" class="admin-subtitulo">Editar usuario</h3>
+        <form id="editar-usuario-form" class="admin-form">
+          <input type="hidden" id="edit-usuario-id" />
+          <div class="campo">
+            <label for="edit-nombre">Nombre completo</label>
+            <input type="text" id="edit-nombre" required />
+          </div>
+          <div class="campo">
+            <label for="edit-rol">Rol</label>
+            <select id="edit-rol" class="select-campo">
+              <option value="usuario">Usuario</option>
+              <option value="supervisor">Supervisor</option>
+              <option value="admin">Administrador</option>
+              <option value="learning">Learning</option>
+            </select>
+          </div>
+          <div class="campo" id="edit-campo-empresa">
+            <label for="edit-empresa_id">Empresa</label>
+            <select id="edit-empresa_id" class="select-campo">
+              <option value="">— Selecciona una empresa —</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>
+              <input type="checkbox" id="edit-esta-activo" />
+              Usuario activo
+            </label>
+          </div>
+          <div class="admin-form admin-form--inline">
+            <button type="submit" class="boton boton--primario boton--sm">
+              <span class="btn-text">Guardar cambios</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+            <button type="button" id="cerrar-modal-usuario" class="boton boton--secundario boton--sm">
+              Cancelar
+            </button>
+          </div>
+          <p id="edit-message" class="mensaje" role="alert" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
 
     <footer class="admin-footer">
       <button id="descargar-auditoria-btn" class="boton boton--secundario">

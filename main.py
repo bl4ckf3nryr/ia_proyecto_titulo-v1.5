@@ -30,14 +30,18 @@ from ultralytics import YOLO
 from base_de_datos.conexion import SesionLocal, crear_tablas, obtener_sesion
 from base_de_datos.auditoria import listar_todas, registrar_accion
 from base_de_datos.empresas import (
+    actualizar_empresa,
     crear_empresa,
+    eliminar_empresa,
     listar_empresas,
     obtener_por_id as obtener_empresa_por_id,
     obtener_por_nombre as obtener_empresa_por_nombre,
 )
 from base_de_datos.usuarios import (
     actualizar_password,
+    actualizar_usuario,
     crear_usuario,
+    eliminar_usuario,
     guardar_codigo_reset,
     listar_usuarios,
     listar_usuarios_por_empresa,
@@ -57,7 +61,7 @@ from base_de_datos.departamentos import (
     obtener_por_id as obtener_departamento_por_id,
 )
 from deepseek.servicio import modelo_disponible, segmentar_bytes  # NUEVO: segmentación piso/pared
-from base_de_datos.modelos import CamaraORM  # NUEVO: learning lista todas las cámaras
+from base_de_datos.modelos import CamaraORM, UsuarioORM  # NUEVO: learning lista todas las cámaras
 from deepseek.camara import frame_de_camara  # NUEVO: frame leído por el servidor
 from deepseek.volumen import (  # NUEVO: habitación vacía vs con cosas
     analizar_bytes,
@@ -682,6 +686,108 @@ def admin_crear_usuario(
     }
 
 
+@app.put("/admin/usuarios/{usuario_id}")
+def admin_actualizar_usuario(
+    usuario_id: int,
+    nombre: str = Form(...),
+    rol: str = Form(...),
+    empresa_id: Optional[int] = Form(None),
+    esta_activo: bool = Form(True),
+    admin=Depends(requiere_admin),
+    sesion: Session = Depends(obtener_sesion),
+):
+    """Actualiza nombre, rol, empresa y estado activo de un usuario."""
+    objetivo = obtener_por_id(sesion, usuario_id)
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # El admin no puede cambiar su propio rol
+    if usuario_id == admin.id and rol != admin.rol:
+        raise HTTPException(
+            status_code=400,
+            detail="No puedes cambiar tu propio rol",
+        )
+
+    if rol not in ROLES_VALIDOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rol inválido. Debe ser uno de: {', '.join(ROLES_VALIDOS)}",
+        )
+
+    if rol in ("supervisor", "usuario") and empresa_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El campo empresa_id es obligatorio para el rol '{rol}'",
+        )
+
+    if rol in ("admin", "learning"):
+        empresa_id = None
+
+    if empresa_id is not None and not obtener_empresa_por_id(sesion, empresa_id):
+        raise HTTPException(status_code=400, detail="La empresa especificada no existe")
+
+    datos = {
+        "nombre": nombre,
+        "rol": rol,
+        "empresa_id": empresa_id,
+        "esta_activo": esta_activo,
+    }
+    usuario_actualizado = actualizar_usuario(sesion, usuario_id, datos)
+
+    registrar_accion(
+        sesion,
+        usuario_email=admin.email,
+        accion="ACTUALIZAR_USUARIO",
+        detalle=(
+            f"Usuario '{objetivo.email}' (id={usuario_id}) actualizado: "
+            f"rol='{rol}', empresa_id={empresa_id}, esta_activo={esta_activo}"
+        ),
+    )
+    return {
+        "mensaje": "Usuario actualizado",
+        "usuario": {
+            "id": usuario_actualizado.id,
+            "nombre": usuario_actualizado.nombre,
+            "email": usuario_actualizado.email,
+            "rol": usuario_actualizado.rol,
+            "empresa_id": usuario_actualizado.empresa_id,
+            "esta_activo": usuario_actualizado.esta_activo,
+        },
+    }
+
+
+@app.delete("/admin/usuarios/{usuario_id}")
+def admin_eliminar_usuario(
+    usuario_id: int,
+    admin=Depends(requiere_admin),
+    sesion: Session = Depends(obtener_sesion),
+):
+    """Elimina un usuario. El admin no puede eliminarse a sí mismo."""
+    if usuario_id == admin.id:
+        raise HTTPException(
+            status_code=400,
+            detail="No puedes eliminarte a ti mismo",
+        )
+
+    objetivo = obtener_por_id(sesion, usuario_id)
+    if not objetivo:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    email_objetivo = objetivo.email
+    eliminado = eliminar_usuario(sesion, usuario_id)
+
+    if not eliminado:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    registrar_accion(
+        sesion,
+        usuario_email=admin.email,
+        accion="ELIMINAR_USUARIO",
+        detalle=f"Usuario '{email_objetivo}' (id={usuario_id}) eliminado",
+    )
+    return {"mensaje": "Usuario eliminado", "id": usuario_id}
+
+
 # ============================================================
 # API: Administración — Empresas
 # ============================================================
@@ -728,6 +834,104 @@ def admin_crear_empresa(
             "esta_activa": empresa.esta_activa,
         },
     }
+
+
+@app.put("/admin/empresas/{empresa_id}")
+def admin_actualizar_empresa(
+    empresa_id: int,
+    nombre: str = Form(...),
+    esta_activa: bool = Form(True),
+    admin=Depends(requiere_admin),
+    sesion: Session = Depends(obtener_sesion),
+):
+    """Actualiza el nombre y estado activo de una empresa."""
+    empresa = obtener_empresa_por_id(sesion, empresa_id)
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    if not nombre.strip():
+        raise HTTPException(status_code=400, detail="El nombre es obligatorio")
+
+    # Verificar nombre duplicado (excluyendo la empresa actual)
+    existente = obtener_empresa_por_nombre(sesion, nombre)
+    if existente and existente.id != empresa_id:
+        raise HTTPException(status_code=400, detail="Ya existe una empresa con ese nombre")
+
+    empresa_actualizada = actualizar_empresa(
+        sesion,
+        empresa_id=empresa_id,
+        nombre=nombre,
+        esta_activa=esta_activa,
+    )
+    registrar_accion(
+        sesion,
+        usuario_email=admin.email,
+        accion="ACTUALIZAR_EMPRESA",
+        detalle=(
+            f"Empresa id={empresa_id} actualizada: "
+            f"nombre='{nombre}', esta_activa={esta_activa}"
+        ),
+    )
+    return {
+        "mensaje": "Empresa actualizada",
+        "empresa": {
+            "id": empresa_actualizada.id,
+            "nombre": empresa_actualizada.nombre,
+            "esta_activa": empresa_actualizada.esta_activa,
+        },
+    }
+
+
+@app.delete("/admin/empresas/{empresa_id}")
+def admin_eliminar_empresa(
+    empresa_id: int,
+    admin=Depends(requiere_admin),
+    sesion: Session = Depends(obtener_sesion),
+):
+    """
+    Elimina una empresa. Falla con HTTP 400 si tiene usuarios o cámaras asociadas.
+    """
+    empresa = obtener_empresa_por_id(sesion, empresa_id)
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    # Verificar usuarios asociados
+    usuarios_asociados = (
+        sesion.query(UsuarioORM)
+        .filter(UsuarioORM.empresa_id == empresa_id)
+        .count()
+    )
+    if usuarios_asociados > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede eliminar: la empresa tiene {usuarios_asociados} usuario(s) asociado(s)",
+        )
+
+    # Verificar cámaras asociadas
+    camaras_asociadas = (
+        sesion.query(CamaraORM)
+        .filter(CamaraORM.empresa_id == empresa_id)
+        .count()
+    )
+    if camaras_asociadas > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede eliminar: la empresa tiene {camaras_asociadas} cámara(s) asociada(s)",
+        )
+
+    nombre_empresa = empresa.nombre
+    eliminada = eliminar_empresa(sesion, empresa_id)
+
+    if not eliminada:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    registrar_accion(
+        sesion,
+        usuario_email=admin.email,
+        accion="ELIMINAR_EMPRESA",
+        detalle=f"Empresa '{nombre_empresa}' (id={empresa_id}) eliminada",
+    )
+    return {"mensaje": "Empresa eliminada", "id": empresa_id}
 
 
 # ============================================================

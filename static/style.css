@@ -1070,6 +1070,10 @@ code::-webkit-scrollbar-thumb:hover { background: var(--plomo-400); }
   display: flex;
 }
 
+.modal:not([hidden]) {
+  display: flex;
+}
+
 .modal-contenido {
   background: var(--modal-bg);
   color: var(--modal-text);

@@ -87,3 +87,44 @@ def actualizar_password(
         usuario.reset_code = None
         usuario.reset_code_expira = None
         sesion.commit()
+
+
+def actualizar_usuario(
+    sesion: Session,
+    usuario_id: int,
+    datos: dict,
+) -> Optional[UsuarioORM]:
+    """
+    Actualiza los campos permitidos de un usuario.
+    `datos` puede contener: nombre, rol, empresa_id, esta_activo.
+    Nunca toca email ni password_hasheada.
+    Devuelve el usuario actualizado o None si no existe.
+    """
+    usuario = sesion.query(UsuarioORM).filter(UsuarioORM.id == usuario_id).first()
+    if not usuario:
+        return None
+
+    campos_permitidos = {"nombre", "rol", "empresa_id", "esta_activo"}
+    for campo, valor in datos.items():
+        if campo in campos_permitidos:
+            if campo == "nombre" and isinstance(valor, str):
+                valor = valor.strip()
+            setattr(usuario, campo, valor)
+
+    sesion.commit()
+    sesion.refresh(usuario)
+    return usuario
+
+
+def eliminar_usuario(sesion: Session, usuario_id: int) -> bool:
+    """
+    Elimina un usuario de la base de datos.
+    Devuelve True si se eliminó, False si no existía.
+    """
+    usuario = sesion.query(UsuarioORM).filter(UsuarioORM.id == usuario_id).first()
+    if not usuario:
+        return False
+
+    sesion.delete(usuario)
+    sesion.commit()
+    return True
