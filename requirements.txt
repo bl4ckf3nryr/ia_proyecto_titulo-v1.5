@@ -11,3 +11,8 @@ python-multipart==0.0.12
 ultralytics>=8.3.0,<9.0.0
 opencv-python-headless>=4.10.0.84,<5.0.0
 numpy>=1.26.4,<2.0.0
+
+# --- v1.4.3 - v1.5: Base de datos en la nube e IA ---
+psycopg2-binary>=2.9.9
+transformers>=4.45.0
+pillow>=10.0.0

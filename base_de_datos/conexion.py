@@ -1,12 +1,26 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-URL_BASE_DATOS = "sqlite:///./login.db"
+# 1. Leer la variable de entorno. En Render usará la URL de Neon.
+# En tu PC, al no existir la variable, usará "sqlite:///./login.db".
+URL_BASE_DATOS = os.environ.get("DATABASE_URL", "sqlite:///./login.db")
 
-motor = create_engine(
-    URL_BASE_DATOS,
-    connect_args={"check_same_thread": False},
-)
+# 2. Render (y algunos servicios) a veces dan la URL con "postgres://". 
+# SQLAlchemy 2.x exige que sea "postgresql://".
+if URL_BASE_DATOS.startswith("postgres://"):
+    URL_BASE_DATOS = URL_BASE_DATOS.replace("postgres://", "postgresql://", 1)
+
+# 3. Configurar el motor (engine) según la base de datos
+if URL_BASE_DATOS.startswith("sqlite"):
+    # Configuración exclusiva para SQLite (desarrollo local)
+    motor = create_engine(
+        URL_BASE_DATOS,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    # Configuración para PostgreSQL (producción en la nube)
+    motor = create_engine(URL_BASE_DATOS)
 
 SesionLocal = sessionmaker(bind=motor, autoflush=False, autocommit=False)
 
